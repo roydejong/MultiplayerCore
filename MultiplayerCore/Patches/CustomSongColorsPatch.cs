@@ -1,5 +1,5 @@
 ﻿using HarmonyLib;
-using System.Reflection;
+using MultiplayerCore.Helpers;
 using UnityEngine;
 
 namespace MultiplayerCore.Patches
@@ -9,8 +9,7 @@ namespace MultiplayerCore.Patches
     {
         private static void Prefix(ref IDifficultyBeatmap difficultyBeatmap, ref ColorScheme? overrideColorScheme)
         {
-            object sConfiguration = typeof(SongCore.Plugin).GetProperty("Configuration", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-            var customSongColors = (bool)typeof(SongCore.Plugin).Assembly.GetType("SongCore.SConfiguration").GetProperty("CustomSongColors").GetValue(sConfiguration);
+            var customSongColors = SongCoreConfig.GetBool("CustomSongColors");
             if (!customSongColors)
                 return;
             var songData = SongCore.Collections.RetrieveDifficultyData(difficultyBeatmap);
