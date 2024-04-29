@@ -1,4 +1,6 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using MultiplayerCore.Beatmaps.Packets;
@@ -14,6 +16,8 @@ namespace MultiplayerCore.Objects
         private readonly MpPacketSerializer _packetSerializer;
         private readonly MpBeatmapLevelProvider _beatmapLevelProvider;
         private readonly SiraLog _logger;
+        private readonly Dictionary<string, MpBeatmapPacket> _lastPlayerBeatmapPackets = new();
+        public IReadOnlyDictionary<string, MpBeatmapPacket> PlayerPackets => _lastPlayerBeatmapPackets;
 
         internal MpPlayersDataModel(
             MpPacketSerializer packetSerializer,
@@ -67,8 +71,8 @@ namespace MultiplayerCore.Objects
             
             var beatmap = _beatmapLevelProvider.GetBeatmapFromPacket(packet);
             var characteristic = _beatmapCharacteristicCollection.GetBeatmapCharacteristicBySerializedName(packet.characteristicName);
-            
-            // TODO: How can we present our custom data in the base game UI?
+
+            PutPlayerPacket(player.userId, packet);
             base.SetPlayerBeatmapLevel(player.userId, new BeatmapKey(beatmap.LevelID, characteristic, packet.difficulty));
         }
 
@@ -95,17 +99,46 @@ namespace MultiplayerCore.Objects
         private async Task SendMpBeatmapPacket(BeatmapKey beatmapKey)
         {
             var levelId = beatmapKey.levelId;
-            
+            _logger.Debug($"Sending beatmap packet for level {levelId}");
+
             var levelHash = Utilities.HashForLevelID(levelId);
             if (levelHash == null)
+            {
+                _logger.Debug("Not a custom level, returning...");
                 return;
+            }
             
             var levelData = await _beatmapLevelProvider.GetBeatmap(levelHash);
             if (levelData == null)
+            {
+                _logger.Debug("Could not get level data for beatmap, returning!");
                 return;
+            }
 
             var packet = new MpBeatmapPacket(levelData, beatmapKey);
+            _logger.Debug("Actually sending packet");
             _multiplayerSessionManager.Send(packet);
         }
+
+        public MpBeatmapPacket? GetPlayerPacket(string playerId)
+        {
+            _lastPlayerBeatmapPackets.TryGetValue(playerId, out var packet);
+            _logger.Debug($"Got player packet for {playerId} with levelHash: {packet?.levelHash ?? "NULL"}");
+            return packet;
+        }
+
+        private void PutPlayerPacket(string playerId, MpBeatmapPacket packet)
+        {
+            _logger.Debug($"Putting packet for player {playerId} with levelHash: {packet.levelHash}");
+            _lastPlayerBeatmapPackets[playerId] = packet;
+        }
+
+        public MpBeatmapPacket? FindLevelPacket(string levelHash)
+        {
+            var packet = _lastPlayerBeatmapPackets.Values.FirstOrDefault(packet => packet.levelHash == levelHash);
+            _logger.Debug($"Found packet: {packet?.levelHash ?? "NULL"}");
+            return packet;
+        }
+
     }
 }
